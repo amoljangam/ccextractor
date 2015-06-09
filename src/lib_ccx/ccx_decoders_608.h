@@ -1,5 +1,5 @@
-#ifndef __608_H__
-
+#ifndef CCX_DECODER_608_H
+#define CCX_DECODER_608_H 
 #include "ccx_common_platform.h"
 #include "ccx_common_structs.h"
 #include "ccx_decoders_structs.h"
@@ -7,10 +7,10 @@
 extern LLONG ts_start_of_xds;
 
 /*
-This variable (ccx_decoder_608_report) holds data on the cc channels & xds packets that are encountered during file parse.
-This can be interesting if you just want to know what kind of data a file holds that has 608 packets. CCExtractor uses it
-for the report functionality.
-*/
+   This variable (ccx_decoder_608_report) holds data on the cc channels & xds packets that are encountered during file parse.
+   This can be interesting if you just want to know what kind of data a file holds that has 608 packets. CCExtractor uses it
+   for the report functionality.
+ */
 struct ccx_decoder_608_report
 {
 	unsigned xds : 1;
@@ -28,7 +28,7 @@ typedef struct ccx_decoder_608_settings
 
 typedef struct ccx_decoder_608_context
 {
-	ccx_decoder_608_settings settings;
+	ccx_decoder_608_settings *settings;
 	eia608_screen buffer1;
 	eia608_screen buffer2;
 	int cursor_row, cursor_column;
@@ -70,42 +70,42 @@ extern const char *color_text[][2];
 
 typedef enum ccx_decoder_608_color_code
 {
-    COL_WHITE = 0,
-    COL_GREEN = 1,
-    COL_BLUE = 2,
-    COL_CYAN = 3,
-    COL_RED = 4,
-    COL_YELLOW = 5,
-    COL_MAGENTA = 6,
-    COL_USERDEFINED = 7,
-    COL_BLACK = 8,
-    COL_TRANSPARENT = 9
+	COL_WHITE = 0,
+	COL_GREEN = 1,
+	COL_BLUE = 2,
+	COL_CYAN = 3,
+	COL_RED = 4,
+	COL_YELLOW = 5,
+	COL_MAGENTA = 6,
+	COL_USERDEFINED = 7,
+	COL_BLACK = 8,
+	COL_TRANSPARENT = 9
 } ccx_decoder_608_color_code;
 
 
 enum font_bits
 {
-    FONT_REGULAR = 0,
-    FONT_ITALICS = 1,
-    FONT_UNDERLINED = 2,
-    FONT_UNDERLINED_ITALICS = 3
+	FONT_REGULAR = 0,
+	FONT_ITALICS = 1,
+	FONT_UNDERLINED = 2,
+	FONT_UNDERLINED_ITALICS = 3
 };
 
 enum command_code
 {
-    COM_UNKNOWN = 0,
-    COM_ERASEDISPLAYEDMEMORY = 1,
-    COM_RESUMECAPTIONLOADING = 2,
-    COM_ENDOFCAPTION = 3,
-    COM_TABOFFSET1 = 4,
-    COM_TABOFFSET2 = 5,
-    COM_TABOFFSET3 = 6,
-    COM_ROLLUP2 = 7,
-    COM_ROLLUP3 = 8,
-    COM_ROLLUP4 = 9,
-    COM_CARRIAGERETURN = 10,
-    COM_ERASENONDISPLAYEDMEMORY = 11,
-    COM_BACKSPACE = 12,
+	COM_UNKNOWN = 0,
+	COM_ERASEDISPLAYEDMEMORY = 1,
+	COM_RESUMECAPTIONLOADING = 2,
+	COM_ENDOFCAPTION = 3,
+	COM_TABOFFSET1 = 4,
+	COM_TABOFFSET2 = 5,
+	COM_TABOFFSET3 = 6,
+	COM_ROLLUP2 = 7,
+	COM_ROLLUP3 = 8,
+	COM_ROLLUP4 = 9,
+	COM_CARRIAGERETURN = 10,
+	COM_ERASENONDISPLAYEDMEMORY = 11,
+	COM_BACKSPACE = 12,
 	COM_RESUMETEXTDISPLAY = 13,
 	COM_ALARMOFF =14,
 	COM_ALARMON = 15,
@@ -121,7 +121,7 @@ void ccx_decoder_608_dinit_library(void **ctx);
 /*
  *
  */
-ccx_decoder_608_context* ccx_decoder_608_init_library(ccx_decoder_608_settings settings, int channel,
+ccx_decoder_608_context* ccx_decoder_608_init_library(struct ccx_decoder_608_settings *settings, int channel,
 		int field, int trim_subs,
 		enum ccx_encoding_type encoding, int *halt,
 		int cc_to_stdout, LLONG subs_delay,
@@ -132,7 +132,7 @@ ccx_decoder_608_context* ccx_decoder_608_init_library(ccx_decoder_608_settings s
  *
  * @param length length of data passed
  *
- * @param context context of cc608 where important information related to 608
+ * @param private_data context of cc608 where important information related to 608
  * 		  are stored.
  *
  * @param sub pointer to subtitle should be memset to 0 when passed first time
@@ -140,7 +140,7 @@ ccx_decoder_608_context* ccx_decoder_608_init_library(ccx_decoder_608_settings s
  *
  * @return number of bytes used from data, -1 when any error is encountered
  */
-int process608(const unsigned char *data, int length, ccx_decoder_608_context *context, struct cc_subtitle *sub);
+int process608(const unsigned char *data, int length, void *private_data, struct cc_subtitle *sub);
 
 /**
  * Issue a EraseDisplayedMemory here so if there's any captions pending
@@ -150,5 +150,4 @@ void handle_end_of_data(ccx_decoder_608_context *context, struct cc_subtitle *su
 
 int write_cc_buffer(ccx_decoder_608_context *context, struct cc_subtitle *sub);
 
-#define __608_H__
 #endif

@@ -1,7 +1,7 @@
 #ifndef CCX_CCEXTRACTOR_H
 #define CCX_CCEXTRACTOR_H
 
-#define VERSION "0.75"
+#define VERSION "0.76"
 
 // Load common includes and constants for library usage
 #include "ccx_common_platform.h"
@@ -126,6 +126,17 @@ struct ccx_s_teletext_config {
 	// uint8_t se_mode : 1; // search engine compatible mode => Uses CCExtractor's write_format
 	// uint64_t utc_refvalue; // UTC referential value => Moved to ccx_decoders_common, so can be used for other decoders (608/xds) too
 	uint16_t user_page; // Page selected by user, which MIGHT be different to 'page' depending on autodetection stuff
+	ccx_encoders_transcript_format *transcript_settings; // Keeps the settings for generating transcript output files.
+	int levdistmincnt, levdistmaxpct; // Means 2 fails or less is "the same", 10% or less is also "the same"
+	struct ccx_boundary_time extraction_start, extraction_end; // Segment we actually process
+	enum ccx_output_format write_format; // 0=Raw, 1=srt, 2=SMI
+	int gui_mode_reports; // If 1, output in stderr progress updates so the GUI can grab them
+	enum ccx_output_date_format date_format;
+	int noautotimeref; // Do NOT set time automatically?
+	unsigned send_to_srv;
+	enum ccx_encoding_type encoding;
+	int nofontcolor;
+	char millis_separator;
 };
 #define MAX_PID 65536
 struct lib_ccx_ctx
@@ -212,8 +223,6 @@ struct lib_ccx_ctx
 	/* File handles */
 	FILE *fh_out_elementarystream;
 	int infd; // descriptor number to input.
-	char *basefilename_for_stdin;
-	char *basefilename_for_network;
 	int PIDs_seen[MAX_PID];
 	struct PMT_entry *PIDs_programs[MAX_PID];
 	
@@ -229,6 +238,12 @@ struct lib_ccx_ctx
 	long capbufsize;
 	unsigned char *capbuf;
 	long capbuflen; // Bytes read in capbuf
+
+	unsigned hauppauge_mode; // If 1, use PID=1003, process specially and so on
+	int live_stream; /* -1 -> Not a complete file but a live stream, without timeout
+                       0 -> A regular file
+                      >0 -> Live stream with a timeout of this value in seconds */
+	int binary_concat; // Disabled by -ve or --videoedited
 };
 #ifdef DEBUG_TELEXCC
 int main_telxcc (int argc, char *argv[]);
@@ -268,6 +283,7 @@ void dinit_libraries( struct lib_ccx_ctx **ctx);
 //params.c
 void parse_parameters (struct ccx_s_options *opt, int argc, char *argv[]);
 void usage (void);
+int detect_input_file_overwrite(struct lib_ccx_ctx *ctx, const char *output_filename);
 int atoi_hex (char *s);
 int stringztoms (const char *s, struct ccx_boundary_time *bt);
 
@@ -334,8 +350,6 @@ void store_hdcc(struct lib_ccx_ctx *ctx, unsigned char *cc_data, int cc_count, i
 			LLONG current_fts_now,struct cc_subtitle *sub);
 void anchor_hdcc(int seq);
 void process_hdcc (struct lib_ccx_ctx *ctx, struct cc_subtitle *sub);
-// mp4.c
-int processmp4 (struct lib_ccx_ctx *ctx, char *file,void *enc_ctx);
 
 // params_dump.c
 void params_dump(struct lib_ccx_ctx *ctx);
@@ -343,12 +357,12 @@ void print_file_report(struct lib_ccx_ctx *ctx);
 
 // output.c
 void init_write(struct ccx_s_write *wb, char *filename);
-void writeraw (const unsigned char *data, int length, struct ccx_s_write *wb);
-void writedata(const unsigned char *data, int length, ccx_decoder_608_context *context, struct cc_subtitle *sub);
+int writeraw (const unsigned char *data, int length, void *private_data, struct cc_subtitle *sub);
 void flushbuffer (struct lib_ccx_ctx *ctx, struct ccx_s_write *wb, int closefile);
 void writercwtdata (struct lib_cc_decode *ctx, const unsigned char *data);
 
 // stream_functions.c
+int isValidMP4Box(unsigned char *buffer, long position, long *nextBoxLocation, int *boxScore);
 void detect_stream_type (struct lib_ccx_ctx *ctx);
 int detect_myth( struct lib_ccx_ctx *ctx );
 int read_video_pes_header (struct lib_ccx_ctx *ctx, unsigned char *nextheader, int *headerlength, int sbuflen);
@@ -363,7 +377,7 @@ LLONG ts_getmoredata(struct lib_ccx_ctx *ctx);
 int write_section(struct lib_ccx_ctx *ctx, struct ts_payload *payload, unsigned char*buf, int size, int pos);
 int parse_PMT (struct lib_ccx_ctx *ctx, unsigned char *buf, int len, int pos);
 int parse_PAT (struct lib_ccx_ctx *ctx);
-int parse_EPG_packet (struct lib_ccx_ctx *ctx);
+void parse_EPG_packet (struct lib_ccx_ctx *ctx);
 void EPG_free();
 
 // myth.c
@@ -371,7 +385,6 @@ void myth_loop(struct lib_ccx_ctx *ctx, void *enc_ctx);
 
 // utility.c
 void fatal(int exit_code, const char *fmt, ...);
-void dvprint(const char *fmt, ...);
 void mprint (const char *fmt, ...);
 void sleep_secs (int secs);
 void dump (LLONG mask, unsigned char *start, int l, unsigned long abs_start, unsigned clear_high_bit);
@@ -379,8 +392,8 @@ bool_t in_array(uint16_t *array, uint16_t length, uint16_t element) ;
 int hex2int (char high, char low);
 void timestamp_to_srttime(uint64_t timestamp, char *buffer);
 void timestamp_to_smptetttime(uint64_t timestamp, char *buffer);
-void millis_to_date (uint64_t timestamp, char *buffer) ;
 int levenshtein_dist (const uint64_t *s1, const uint64_t *s2, unsigned s1len, unsigned s2len);
+void millis_to_date (uint64_t timestamp, char *buffer, enum ccx_output_date_format date_format, char millis_separator);
 #ifndef _WIN32
 void m_signal(int sig, void (*func)(int));
 #endif

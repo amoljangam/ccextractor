@@ -137,7 +137,7 @@ void net_send_header(const unsigned char *data, size_t len)
 	}
 }
 
-void net_send_cc(const unsigned char *data, size_t len)
+int net_send_cc(const unsigned char *data, int len, void *private_data, struct cc_subtitle *sub)
 {
 	assert(srv_sd > 0);
 
@@ -150,12 +150,12 @@ void net_send_cc(const unsigned char *data, size_t len)
 	{
 		if (rc < 0)
 			mprint("write() error: %s", strerror(errno));
-		return;
+		return rc;
 	}
 
 	/* nanosleep((struct timespec[]){{0, 100000000}}, NULL); */
 	/* Sleep(100); */
-	return;
+	return rc;
 }
 
 /*

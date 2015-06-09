@@ -10,8 +10,7 @@ License: GPL 2.0
 #include <signal.h>
 #include "ffmpeg_intgr.h"
 #include "ccx_common_option.h"
-
-void xds_cea608_test();
+#include "ccx_mp4.h"
 
 struct lib_ccx_ctx *signal_ctx;
 void sigint_handler()
@@ -22,7 +21,7 @@ void sigint_handler()
 	exit(EXIT_SUCCESS);
 }
 
-
+struct ccx_s_options ccx_options;
 int main(int argc, char *argv[])
 {
 	char *c;
@@ -42,6 +41,11 @@ int main(int argc, char *argv[])
 
 	// Initialize libraries
 	ctx = init_libraries(&ccx_options);
+	if (!ctx && errno == ENOMEM)
+		fatal (EXIT_NOT_ENOUGH_MEMORY, "Not enough memory\n");
+	else if (!ctx && errno == EINVAL)
+		fatal (CCX_COMMON_EXIT_BUG_BUG, "Invalid option to CCextractor Library\n");
+
 	dec_ctx = ctx->dec_ctx;
 
 
@@ -69,11 +73,11 @@ int main(int argc, char *argv[])
 	{
 		fatal(EXIT_TOO_MANY_INPUT_FILES, "UDP mode is not compatible with input files.\n");
 	}
-	if (ccx_options.input_source==CCX_DS_NETWORK || ccx_options.input_source==CCX_DS_TCP)
+	if (ccx_options.input_source == CCX_DS_NETWORK || ccx_options.input_source == CCX_DS_TCP)
 	{
 		ccx_options.buffer_input=1; // Mandatory, because each datagram must be read complete.
 	}
-	if (ctx->num_input_files && ccx_options.input_source==CCX_DS_TCP)
+	if (ctx->num_input_files && ccx_options.input_source == CCX_DS_TCP)
 	{
 		fatal(EXIT_TOO_MANY_INPUT_FILES, "TCP mode is not compatible with input files.\n");
 	}
@@ -101,39 +105,6 @@ int main(int argc, char *argv[])
 		else
 			ctx->wbout1.filename=ccx_options.output_filename;
 	}
-
-	switch (ccx_options.write_format)
-	{
-		case CCX_OF_RAW:
-			ctx->extension = ".raw";
-			break;
-		case CCX_OF_SRT:
-			ctx->extension = ".srt";
-			break;
-		case CCX_OF_SAMI:
-			ctx->extension = ".smi";
-			break;
-		case CCX_OF_SMPTETT:
-			ctx->extension = ".ttml";
-			break;
-		case CCX_OF_TRANSCRIPT:
-			ctx->extension = ".txt";
-			break;
-		case CCX_OF_RCWT:
-			ctx->extension = ".bin";
-			break;
-		case CCX_OF_SPUPNG:
-			ctx->extension = ".xml";
-			break;
-		case CCX_OF_NULL:
-			ctx->extension = "";
-			break;
-		case CCX_OF_DVDRAW:
-			ctx->extension = ".dvdraw";
-			break;
-		default:
-			fatal (CCX_COMMON_EXIT_BUG_BUG, "write_format doesn't have any legal value, this is a bug.\n");			
-	}
 	params_dump(ctx);
 
 	// default teletext page
@@ -153,40 +124,6 @@ int main(int argc, char *argv[])
 	}
 
 	subline = (unsigned char *) malloc (SUBLINESIZE);
-
-	switch (ccx_options.input_source)
-	{
-		case CCX_DS_FILE:
-			ctx->basefilename = (char *) malloc (strlen (ctx->inputfile[0])+1);
-			break;
-		case CCX_DS_STDIN:
-			ctx->basefilename = (char *) malloc (strlen (ctx->basefilename_for_stdin)+1);
-			break;
-		case CCX_DS_NETWORK:
-		case CCX_DS_TCP:
-			ctx->basefilename = (char *) malloc (strlen (ctx->basefilename_for_network)+1);
-			break;
-	}		
-	if (ctx->basefilename == NULL)
-		fatal (EXIT_NOT_ENOUGH_MEMORY, "Not enough memory\n");		
-	switch (ccx_options.input_source)
-	{
-		case CCX_DS_FILE:
-			strcpy (ctx->basefilename, ctx->inputfile[0]);
-			break;
-		case CCX_DS_STDIN:
-			strcpy (ctx->basefilename, ctx->basefilename_for_stdin);
-			break;
-		case CCX_DS_NETWORK:
-		case CCX_DS_TCP:
-			strcpy (ctx->basefilename, ctx->basefilename_for_network);
-			break;
-	}		
-	
-	for (c = ctx->basefilename + strlen(ctx->basefilename) - 1; c>ctx->basefilename &&
-		*c!='.'; c--) {;} // Get last .
-	if (*c=='.')
-		*c=0;
 
 	if (ctx->wbout1.filename==NULL)
 	{
@@ -228,6 +165,10 @@ int main(int argc, char *argv[])
 			else
 			{
 				mprint ("Creating %s\n", ctx->wbout1.filename);
+				if (detect_input_file_overwrite(ctx, ctx->wbout1.filename)) {
+					fatal(CCX_COMMON_EXIT_FILE_CREATION_FAILED,
+						  "Output filename is same as one of input filenames. Check output parameters.\n");
+				}
 				ctx->wbout1.fh=open (ctx->wbout1.filename, O_RDWR | O_CREAT | O_TRUNC | O_BINARY, S_IREAD | S_IWRITE);
 				if (ctx->wbout1.fh==-1)
 				{
@@ -260,6 +201,10 @@ int main(int argc, char *argv[])
 						strcat (ctx->wbout1.filename,(const char *) ctx->extension);
 					}
 					mprint ("Creating %s\n", ctx->wbout1.filename);
+					if (detect_input_file_overwrite(ctx, ctx->wbout1.filename)) {
+						fatal(CCX_COMMON_EXIT_FILE_CREATION_FAILED,
+							  "Output filename is same as one of input filenames. Check output parameters.\n");
+					}
 					ctx->wbout1.fh=open (ctx->wbout1.filename, O_RDWR | O_CREAT | O_TRUNC | O_BINARY, S_IREAD | S_IWRITE);
 					if (ctx->wbout1.fh==-1)
 					{
@@ -269,13 +214,13 @@ int main(int argc, char *argv[])
 				switch (ccx_options.write_format)
 				{
 				case CCX_OF_RAW:
-					init_encoder(enc_ctx, &ctx->wbout1);
-					writeraw(BROADCAST_HEADER, sizeof(BROADCAST_HEADER), &ctx->wbout1);
+					init_encoder(enc_ctx, &ctx->wbout1,&ccx_options);
+					dec_ctx->writedata(BROADCAST_HEADER, sizeof(BROADCAST_HEADER), dec_ctx->context_cc608_field_1, NULL);
 					break;
 				case CCX_OF_DVDRAW:
 					break;
 				case CCX_OF_RCWT:
-					if (init_encoder(enc_ctx, &ctx->wbout1))
+					if (init_encoder(enc_ctx, &ctx->wbout1, &ccx_options))
 						fatal(EXIT_NOT_ENOUGH_MEMORY, "Not enough memory\n");
 					set_encoder_subs_delay(enc_ctx, ctx->subs_delay);
 					set_encoder_last_displayed_subs_ms(enc_ctx, ctx->last_displayed_subs_ms);
@@ -284,13 +229,13 @@ int main(int argc, char *argv[])
 				default:
 					if (!ccx_options.no_bom){
 						if (ccx_options.encoding == CCX_ENC_UTF_8){ // Write BOM
-							writeraw(UTF8_BOM, sizeof(UTF8_BOM), &ctx->wbout1);
+							dec_ctx->writedata(UTF8_BOM, sizeof(UTF8_BOM), dec_ctx->context_cc608_field_1, NULL);
 						}
 						if (ccx_options.encoding == CCX_ENC_UNICODE){ // Write BOM				
-							writeraw(LITTLE_ENDIAN_BOM, sizeof(LITTLE_ENDIAN_BOM), &ctx->wbout1);
+							dec_ctx->writedata(LITTLE_ENDIAN_BOM, sizeof(LITTLE_ENDIAN_BOM), dec_ctx->context_cc608_field_1, NULL);
 						}
 					}
-					if (init_encoder(enc_ctx, &ctx->wbout1)){
+					if (init_encoder(enc_ctx, &ctx->wbout1, &ccx_options)){
 						fatal(EXIT_NOT_ENOUGH_MEMORY, "Not enough memory\n");
 					}
 					set_encoder_subs_delay(enc_ctx, ctx->subs_delay);
@@ -322,13 +267,17 @@ int main(int argc, char *argv[])
 						strcat (ctx->wbout2.filename,(const char *) ctx->extension);
 					}
 					mprint ("Creating %s\n", ctx->wbout2.filename);
+					if (detect_input_file_overwrite(ctx, ctx->wbout2.filename)) {
+						fatal(CCX_COMMON_EXIT_FILE_CREATION_FAILED,
+							  "Output filename is same as one of input filenames. Check output parameters.\n");
+					}
 					ctx->wbout2.fh=open (ctx->wbout2.filename, O_RDWR | O_CREAT | O_TRUNC | O_BINARY, S_IREAD | S_IWRITE);
 					if (ctx->wbout2.fh==-1)
 					{
 						fatal(CCX_COMMON_EXIT_FILE_CREATION_FAILED, "Failed\n");
 					}
 					if(ccx_options.write_format == CCX_OF_RAW)
-						writeraw (BROADCAST_HEADER,sizeof (BROADCAST_HEADER),&ctx->wbout2);
+						dec_ctx->writedata (BROADCAST_HEADER,sizeof (BROADCAST_HEADER), dec_ctx->context_cc608_field_2, NULL);
 				}
 
 				switch (ccx_options.write_format)
@@ -337,7 +286,7 @@ int main(int argc, char *argv[])
 					case CCX_OF_DVDRAW:
 						break;
 					case CCX_OF_RCWT:
-						if( init_encoder(enc_ctx+1,&ctx->wbout2) )
+						if( init_encoder(enc_ctx+1, &ctx->wbout2, &ccx_options) )
 							fatal (EXIT_NOT_ENOUGH_MEMORY, "Not enough memory\n");
 						set_encoder_subs_delay(enc_ctx+1, ctx->subs_delay);
 						set_encoder_last_displayed_subs_ms(enc_ctx+1, ctx->last_displayed_subs_ms);
@@ -346,13 +295,13 @@ int main(int argc, char *argv[])
 					default:
 						if (!ccx_options.no_bom){
 							if (ccx_options.encoding == CCX_ENC_UTF_8){ // Write BOM
-								writeraw(UTF8_BOM, sizeof(UTF8_BOM), &ctx->wbout2);
+								dec_ctx->writedata(UTF8_BOM, sizeof(UTF8_BOM), dec_ctx->context_cc608_field_2, NULL);
 							}
 							if (ccx_options.encoding == CCX_ENC_UNICODE){ // Write BOM				
-								writeraw(LITTLE_ENDIAN_BOM, sizeof(LITTLE_ENDIAN_BOM), &ctx->wbout2);
+								dec_ctx->writedata(LITTLE_ENDIAN_BOM, sizeof(LITTLE_ENDIAN_BOM), dec_ctx->context_cc608_field_2, NULL);
 							}
 						}
-						if (init_encoder(enc_ctx + 1, &ctx->wbout2)){
+						if (init_encoder(enc_ctx + 1, &ctx->wbout2, &ccx_options)){
 							fatal(EXIT_NOT_ENOUGH_MEMORY, "Not enough memory\n");
 						}
 						set_encoder_subs_delay(enc_ctx+1, ctx->subs_delay);
@@ -554,6 +503,7 @@ int main(int argc, char *argv[])
 				
 		switch (ctx->stream_mode)
 		{
+			struct ccx_s_mp4Cfg mp4_cfg = {ccx_options.mp4vidtrack};
 			case CCX_SM_ELEMENTARY_OR_NOT_FOUND:
 				if (!ccx_options.use_gop_as_pts) // If !0 then the user selected something
 					ccx_options.use_gop_as_pts = 1; // Force GOP timing for ES
@@ -580,10 +530,12 @@ int main(int argc, char *argv[])
 				show_myth_banner = 1;
 				myth_loop(ctx, &enc_ctx);
 				break;
-			case CCX_SM_MP4:				
+			case CCX_SM_MP4:
 				mprint ("\rAnalyzing data with GPAC (MP4 library)\n");
 				close_input_file(ctx); // No need to have it open. GPAC will do it for us
-				processmp4 (ctx, ctx->inputfile[0],&enc_ctx);
+				processmp4 (ctx, &mp4_cfg, ctx->inputfile[0],&enc_ctx);
+				if (ccx_options.print_file_reports)
+					print_file_report(ctx);
 				break;
 #ifdef WTV_DEBUG
 			case CCX_SM_HEX_DUMP:
