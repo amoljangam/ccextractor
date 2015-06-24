@@ -111,7 +111,7 @@ void cc708_service_reset(cc708_service_decoder *decoder)
 		decoder->windows[j].memory_reserved=0;
 		decoder->windows[j].is_empty=1;
 		memset (decoder->windows[j].commands, 0,
-				sizeof (decoder->windows[j].commands));
+		sizeof (decoder->windows[j].commands));
 	}
 	decoder->current_window=-1;
 	decoder->current_visible_start_ms=0;
@@ -160,7 +160,7 @@ void printTVtoSRT (cc708_service_decoder *decoder, int which)
 	if (decoder->output_format == CCX_OF_NULL)
 		return;
 
-	/* tvscreen *tv = (which==1)? &decoder->tv1:&decoder->tv2; */
+        tvscreen *tv = (which==1)? &decoder->tv1:&decoder->tv2;
 	unsigned h1,m1,s1,ms1;
 	unsigned h2,m2,s2,ms2;
 	LLONG ms_start= decoder->current_visible_start_ms;
@@ -219,14 +219,16 @@ void printTVtoSRT (cc708_service_decoder *decoder, int which)
 			for (int j=f;j<=l;j++)
 				write (decoder->fh,&decoder->tv->chars[i][j],1);
 			write (decoder->fh,"\r\n",2);
+		
 		}
 	}
 	write (decoder->fh,"\r\n",2);
+	
 }
 
 void printTVtoConsole (cc708_service_decoder *decoder, int which)
 {
-	/* tvscreen *tv = (which==1)? &decoder->tv1:&decoder->tv2; */
+	tvscreen *tv = (which==1)? &decoder->tv1:&decoder->tv2; 
 	char tbuf1[15],tbuf2[15];
 	print_mstime2buf (decoder->current_visible_start_ms,tbuf1);
 	print_mstime2buf (get_visible_end(),tbuf2);
@@ -354,7 +356,7 @@ void updateScreen (cc708_service_decoder *decoder)
 			memcpy (decoder->tv->chars[top+j],wnd[i]->rows[j],copycols);
 		}
 	}
-	decoder->current_visible_start_ms=get_visible_start();
+	decoder->current_visible_start_ms = get_visible_start();
 }
 
 /* This function handles future codes. While by definition we can't do any work on them, we must return
@@ -423,7 +425,7 @@ int handle_708_extended_char (cc708_service_decoder *decoder, unsigned char *dat
 	else
 	{
 		c=get_internal_from_G3 (code);
-		used=1;
+		used=1;			
 		process_character (decoder, c);
 	}
 	return used;
@@ -508,7 +510,6 @@ int handle_708_C0 (cc708_service_decoder *decoder, unsigned char *data, int data
 	// TODO: Do something useful eventually
 	return len;
 }
-
 
 void process_character (cc708_service_decoder *decoder, unsigned char internal_char)
 {
@@ -605,6 +606,7 @@ void handle_708_CLW_ClearWindows (cc708_service_decoder *decoder, int windows_bi
 			}
 			windows_bitmap>>=1;
 		}
+		
 	}
 	ccx_common_logging.debug_ftn(CCX_DMT_708, "\n");
 }
@@ -681,8 +683,10 @@ void handle_708_TGW_ToggleWindows (cc708_service_decoder *decoder, int windows_b
 			windows_bitmap>>=1;
 		}
 		updateScreen(decoder);
+	
 	}
 	ccx_common_logging.debug_ftn(CCX_DMT_708, "\n");
+	
 }
 
 void clearWindowText (e708Window *window)
@@ -780,6 +784,7 @@ void handle_708_DFx_DefineWindow (cc708_service_decoder *decoder, int window, un
 	// ...also makes the defined windows the current window (setCurrentWindow)
 	handle_708_CWx_SetCurrentWindow (decoder, window);
 	memcpy (decoder->windows[window].commands, data+1, 6);
+	updateScreen(decoder);
 }
 
 void handle_708_SWA_SetWindowAttributes (cc708_service_decoder *decoder, unsigned char *data)
@@ -839,6 +844,7 @@ void deleteWindow (cc708_service_decoder *decoder, int window)
 		clearWindowText(&decoder->windows[window]);
 	}
 	decoder->windows[window].is_defined=0;
+	
 }
 
 void handle_708_DLW_DeleteWindows (cc708_service_decoder *decoder, int windows_bitmap)
@@ -940,6 +946,7 @@ void handle_708_SPL_SetPenLocation (cc708_service_decoder *decoder, unsigned cha
 	}
 	decoder->windows[decoder->current_window].pen_row=row;
 	decoder->windows[decoder->current_window].pen_column=col;
+	updateScreen(decoder);
 }
 
 
